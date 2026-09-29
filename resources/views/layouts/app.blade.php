@@ -48,22 +48,66 @@
 
             <!-- Navigation Actions -->
             <div class="flex items-center gap-4">
-                @auth
-                    <span class="text-sm text-slate-600">{{ Auth::user()->name }}</span>
-                    <form action="{{ route('logout') }}" method="POST" class="inline">
-                        @csrf
-                        <button class="text-sm font-semibold text-slate-600 hover:text-red-600 transition">
-                            Logout
-                        </button>
-                    </form>
-                @else
-                    <a href="{{ route('login') }}" class="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition">
-                        Login
-                    </a>
-                    <a href="{{ route('register') }}" class="text-sm font-semibold bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-200">
-                        Register
-                    </a>
-                @endauth
+@auth
+
+    <a
+        href="{{ route('dashboard') }}"
+        class="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition"
+    >
+        Dashboard
+    </a>
+
+    <a
+        href="{{ route('security.activity') }}"
+        class="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition"
+    >
+        Security
+    </a>
+
+    <a
+        href="{{ route('webauthn.devices.list') }}"
+        class="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition"
+    >
+        Devices
+    </a>
+
+    <span class="text-sm text-slate-600">
+        {{ Auth::user()->name }}
+    </span>
+
+    <form
+        action="{{ route('logout') }}"
+        method="POST"
+        class="inline"
+    >
+
+        @csrf
+
+        <button
+            class="text-sm font-semibold text-slate-600 hover:text-red-600 transition"
+        >
+            Logout
+        </button>
+
+    </form>
+
+@else
+
+    <a
+        href="{{ route('login') }}"
+        class="text-sm font-semibold text-slate-600 hover:text-indigo-600 transition"
+    >
+        Login
+    </a>
+
+    <a
+        href="{{ route('register') }}"
+        class="text-sm font-semibold bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition shadow-lg shadow-indigo-200"
+    >
+        Register
+    </a>
+
+@endauth
             </div>
         </div>
     </nav>

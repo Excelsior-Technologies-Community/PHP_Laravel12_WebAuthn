@@ -32,9 +32,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
+     * The attributes that should be cast.
      */
     protected function casts(): array
     {
@@ -45,15 +43,69 @@ class User extends Authenticatable
     }
 
     /**
-     * Get user's WebAuthn keys (Relationship)
+     * Get all WebAuthn credentials belonging to this user.
      */
     public function webauthnKeys()
     {
-        return $this->hasMany(WebauthnKey::class, 'user_id');
+        return $this->hasMany(
+            WebauthnKey::class,
+            'user_id'
+        );
     }
 
     /**
-     * Add a new WebAuthn key for this user
+     * Get only active WebAuthn credentials.
+     */
+    public function activeWebauthnKeys()
+    {
+        return $this->webauthnKeys()
+            ->whereNull('deleted_at');
+    }
+
+    /**
+     * Get all security activities belonging to this user.
+     */
+    public function securityActivities()
+    {
+        return $this->hasMany(
+            SecurityActivity::class,
+            'user_id'
+        );
+    }
+
+    /**
+     * Get recent security activities.
+     */
+    public function recentSecurityActivities($limit = 10)
+    {
+        return $this->securityActivities()
+            ->latest()
+            ->limit($limit);
+    }
+
+    /**
+     * Get successful security activities.
+     */
+    public function successfulSecurityActivities()
+    {
+        return $this->securityActivities()
+            ->where('status', 'success');
+    }
+
+    /**
+     * Get failed security activities.
+     */
+    public function failedSecurityActivities()
+    {
+        return $this->securityActivities()
+            ->where('status', 'failed');
+    }
+
+    /**
+     * Add a new WebAuthn credential.
+     *
+     * The transports array is automatically converted to JSON
+     * by the WebauthnKey model cast.
      */
     public function addWebauthnKey(
         string $name,
@@ -65,8 +117,39 @@ class User extends Authenticatable
             'name' => $name,
             'credential_id' => $credentialId,
             'credential_public_key' => $credentialPublicKey,
-            'transports' => json_encode($transports),
+            'transports' => $transports,
             'sign_count' => 0,
         ]);
+    }
+
+    /**
+     * Get the number of active WebAuthn devices.
+     */
+    public function activeWebauthnDeviceCount()
+    {
+        return $this->webauthnKeys()
+            ->whereNull('deleted_at')
+            ->count();
+    }
+
+    /**
+     * Get the number of WebAuthn devices that have been used.
+     */
+    public function usedWebauthnDeviceCount()
+    {
+        return $this->webauthnKeys()
+            ->whereNull('deleted_at')
+            ->whereNotNull('last_used_at')
+            ->count();
+    }
+
+    /**
+     * Get the number of security activities today.
+     */
+    public function todaySecurityActivityCount()
+    {
+        return $this->securityActivities()
+            ->whereDate('created_at', today())
+            ->count();
     }
 }

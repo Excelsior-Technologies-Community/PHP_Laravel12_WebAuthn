@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class WebauthnKey extends Model
@@ -45,10 +45,11 @@ class WebauthnKey extends Model
         'deleted_at' => 'datetime',
         'last_used_at' => 'datetime',
         'transports' => 'array',
+        'sign_count' => 'integer',
     ];
 
     /**
-     * Get the authenticatable model (morphs to User or other models)
+     * Get the authenticatable model.
      */
     public function authenticatable()
     {
@@ -56,7 +57,7 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Get the user that owns this key
+     * Get the user that owns this credential.
      */
     public function user()
     {
@@ -64,7 +65,18 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Scope: Get only active credentials
+     * Get security activities related to this credential.
+     */
+    public function securityActivities()
+    {
+        return $this->hasMany(
+            SecurityActivity::class,
+            'device_id'
+        );
+    }
+
+    /**
+     * Scope: Get only active credentials.
      */
     public function scopeActive($query)
     {
@@ -72,7 +84,7 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Scope: Get credentials for a specific user
+     * Scope: Get credentials for a specific user.
      */
     public function scopeForUser($query, $userId)
     {
@@ -80,15 +92,19 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Scope: Get credentials created in the last N days
+     * Scope: Get credentials created in the last N days.
      */
     public function scopeRecentlyAdded($query, $days = 7)
     {
-        return $query->where('created_at', '>=', now()->subDays($days));
+        return $query->where(
+            'created_at',
+            '>=',
+            now()->subDays($days)
+        );
     }
 
     /**
-     * Get human-readable transports
+     * Get human-readable transports.
      */
     public function getTransportsList()
     {
@@ -96,8 +112,10 @@ class WebauthnKey extends Model
             return 'Unknown';
         }
 
-        $transports = is_array($this->transports) ? $this->transports : json_decode($this->transports, true) ?? [];
-        
+        $transports = is_array($this->transports)
+            ? $this->transports
+            : json_decode($this->transports, true) ?? [];
+
         if (empty($transports)) {
             return 'Unknown';
         }
@@ -112,13 +130,21 @@ class WebauthnKey extends Model
             'hybrid' => '🔄 Hybrid',
         ];
 
-        return implode(', ', array_map(function ($t) use ($labels) {
-            return $labels[$t] ?? ucfirst(str_replace(['_', '-'], ' ', $t));
-        }, $transports));
+        return implode(', ', array_map(
+            function ($transport) use ($labels) {
+                return $labels[$transport]
+                    ?? ucfirst(str_replace(
+                        ['_', '-'],
+                        ' ',
+                        $transport
+                    ));
+            },
+            $transports
+        ));
     }
 
     /**
-     * Get device type label
+     * Get device type label.
      */
     public function getDeviceTypeLabel()
     {
@@ -129,6 +155,7 @@ class WebauthnKey extends Model
             'tablet' => '📱 Tablet',
             'laptop' => '💻 Laptop',
             'desktop' => '🖥️ Desktop',
+            'mobile' => '📱 Mobile',
             'unknown' => '❓ Unknown Device',
         ];
 
@@ -136,36 +163,48 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Update last used timestamp
+     * Mark credential as successfully used.
+     *
+     * The WebAuthn controller should update sign_count
+     * using the authenticator's actual counter.
      */
-    public function markAsUsed()
+    public function markAsUsed(?int $signCount = null)
     {
-        $this->update([
-            'sign_count' => $this->sign_count + 1,
+        $data = [
             'last_used_at' => now(),
-        ]);
+        ];
+
+        if ($signCount !== null) {
+            $data['sign_count'] = $signCount;
+        }
+
+        $this->update($data);
 
         return $this;
     }
 
     /**
-     * Get formatted creation date
+     * Get formatted creation date.
      */
     public function getFormattedCreatedAt()
     {
-        return $this->created_at->format('M d, Y \a\t h:i A');
+        return $this->created_at
+            ? $this->created_at->format('M d, Y \a\t h:i A')
+            : 'Unknown';
     }
 
     /**
-     * Get readable creation time
+     * Get readable creation time.
      */
     public function getCreatedAtDiffForHumans()
     {
-        return $this->created_at->diffForHumans();
+        return $this->created_at
+            ? $this->created_at->diffForHumans()
+            : 'Unknown';
     }
 
     /**
-     * Get days since last use
+     * Get days since last use.
      */
     public function getDaysSinceLastUse()
     {
@@ -173,11 +212,11 @@ class WebauthnKey extends Model
             return null;
         }
 
-        return now()->diffInDays($this->last_used_at);
+        return $this->last_used_at->diffInDays(now());
     }
 
     /**
-     * Check if credential has been used
+     * Check if credential has been used.
      */
     public function hasBeenUsed()
     {
@@ -185,37 +224,54 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Check if credential is likely cloned (sign count didn't increase)
+     * Check whether the supplied authenticator counter
+     * indicates a possible cloned credential.
+     *
+     * A counter of 0 can legitimately remain 0.
      */
-    public function isPossiblyCloned($newSignCount)
+    public function isPossiblyCloned(int $newSignCount)
     {
+        if ($this->sign_count === 0) {
+            return false;
+        }
+
         return $newSignCount <= $this->sign_count;
     }
 
     /**
-     * Get credential security score
+     * Get credential security score.
      */
     public function getSecurityScore()
     {
         $score = 100;
 
-        // Deduct if not used recently (last 30 days)
-        if ($this->last_used_at && now()->diffInDays($this->last_used_at) > 30) {
+        // Deduct if not used recently.
+        if (
+            $this->last_used_at &&
+            $this->last_used_at->diffInDays(now()) > 30
+        ) {
             $score -= 10;
         }
 
-        // Deduct if created long ago (3+ months) and not updated
-        if ($this->created_at->diffInMonths() > 3 && !$this->last_used_at) {
+        // Deduct if old and never used.
+        if (
+            $this->created_at &&
+            $this->created_at->diffInMonths(now()) > 3 &&
+            !$this->last_used_at
+        ) {
             $score -= 15;
         }
 
-        // Bonus if it's a security key
+        // Bonus for security key.
         if ($this->device_type === 'security_key') {
             $score += 10;
         }
 
-        // Bonus if it has multiple transports
-        if (count($this->transports ?? []) > 1) {
+        // Bonus for multiple transports.
+        if (
+            is_array($this->transports) &&
+            count($this->transports) > 1
+        ) {
             $score += 5;
         }
 
@@ -223,7 +279,7 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Archive a credential (soft delete)
+     * Archive a credential using soft delete.
      */
     public function archive()
     {
@@ -231,7 +287,7 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Permanently delete a credential
+     * Permanently delete a credential.
      */
     public function permanentlyDelete()
     {
@@ -239,7 +295,7 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Restore an archived credential
+     * Restore an archived credential.
      */
     public function restore()
     {
@@ -247,19 +303,23 @@ class WebauthnKey extends Model
     }
 
     /**
-     * Get credential details for API
+     * Get credential details for API.
      */
     public function toApiArray()
     {
         return [
             'id' => $this->id,
-            'name' => $this->name ?? $this->alias,
+            'name' => $this->alias ?: $this->name,
             'type' => $this->getDeviceTypeLabel(),
             'transports' => $this->getTransportsList(),
             'created_at' => $this->getFormattedCreatedAt(),
-            'last_used_at' => $this->last_used_at?->format('M d, Y') ?? 'Never',
+            'last_used_at' => $this->last_used_at
+                ? $this->last_used_at->format('M d, Y')
+                : 'Never',
             'security_score' => $this->getSecurityScore(),
             'sign_count' => $this->sign_count,
+            'device_os' => $this->device_os,
+            'rp_id' => $this->rp_id,
         ];
     }
 }
