@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\WebauthnController;
 use App\Http\Controllers\SecurityActivityController;
+use App\Http\Controllers\SecurityDeviceController;
 
 /*
 |--------------------------------------------------------------------------
@@ -47,12 +48,15 @@ Route::middleware('guest')->group(function () {
     )->name('login.store');
 
 
+    // ============================================================
+    // WEBAUTHN LOGIN
+    // ============================================================
+
     // WebAuthn Login Options
     Route::post(
         'webauthn/login/options',
         [WebauthnController::class, 'loginOptions']
     )->name('webauthn.login.options');
-
 
     // WebAuthn Login
     Route::post(
@@ -68,14 +72,20 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
 
-    // Dashboard
+    // ============================================================
+    // DASHBOARD
+    // ============================================================
+
     Route::get(
         'dashboard',
         [AuthController::class, 'dashboard']
     )->name('dashboard');
 
 
-    // Logout
+    // ============================================================
+    // LOGOUT
+    // ============================================================
+
     Route::post(
         'logout',
         [AuthController::class, 'logout']
@@ -100,11 +110,40 @@ Route::middleware('auth')->group(function () {
     )->name('webauthn.register');
 
 
-    // List Devices
+    // ============================================================
+    // DEVICE MANAGEMENT
+    // ============================================================
+
+    /*
+    |--------------------------------------------------------------------------
+    | Device List
+    |--------------------------------------------------------------------------
+    | New SecurityDeviceController handles:
+    |
+    | - Device search
+    | - Device type filter
+    | - Operating system filter
+    | - Device sorting
+    | - Recently used / never used filter
+    | - Device security status filter
+    */
     Route::get(
         'webauthn/devices',
-        [WebauthnController::class, 'listDevices']
+        [SecurityDeviceController::class, 'index']
     )->name('webauthn.devices.list');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Device CSV Export
+    |--------------------------------------------------------------------------
+    |
+    | Exports the currently filtered/sorted device list.
+    */
+    Route::get(
+        'webauthn/devices/export',
+        [SecurityDeviceController::class, 'export']
+    )->name('webauthn.devices.export');
 
 
     // Rename Device
@@ -125,8 +164,33 @@ Route::middleware('auth')->group(function () {
     // SECURITY ACTIVITY
     // ============================================================
 
+    /*
+    |--------------------------------------------------------------------------
+    | Security Activity Dashboard
+    |--------------------------------------------------------------------------
+    |
+    | New functionality:
+    |
+    | - Keyword search
+    | - Date range filtering
+    | - Activity sorting
+    | - Existing activity/status/date filters
+    */
     Route::get(
         'security/activity',
         [SecurityActivityController::class, 'dashboard']
     )->name('security.activity');
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Security Activity CSV Export
+    |--------------------------------------------------------------------------
+    |
+    | Exports the currently filtered/sorted security activity records.
+    */
+    Route::get(
+        'security/activity/export',
+        [SecurityActivityController::class, 'export']
+    )->name('security.activity.export');
 });
